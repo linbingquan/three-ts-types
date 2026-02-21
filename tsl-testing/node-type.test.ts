@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { Fn, normalWorldGeometry, vec2, vec3 } from "three/tsl";
+import { Fn, normalWorldGeometry, vec2, vec3, vec4 } from "three/tsl";
 import * as THREE from "three/webgpu";
 
 const renderer = new THREE.WebGPURenderer();
@@ -112,6 +112,23 @@ test("vec3(1, 0, 2).xz = 6", async () => {
   renderer.render(scene, camera);
 });
 
+test("vec3(1, 0, 2).xz = vec2(2, 3)", async () => {
+  const fn = Fn(() => {
+    const testVec3 = vec3(1, 0, 2);
+    testVec3.xz = vec2(2, 3);
+    return testVec3;
+  });
+
+  const result: THREE.Node<"vec3"> = fn();
+
+  expect(result.getNodeType(nodeBuilder)).toBe("vec3");
+
+  scene.backgroundNode = result.debug();
+
+  await renderer.init();
+  renderer.render(scene, camera);
+});
+
 test("vec3(1, 0, 2).setXY(5)", async () => {
   const testVec3Set: THREE.Node<"vec3"> = vec3(1, 0, 2).setXY(5);
 
@@ -123,8 +140,36 @@ test("vec3(1, 0, 2).setXY(5)", async () => {
   renderer.render(scene, camera);
 });
 
+test("vec4(1, 0, 2, 5).setYZ(vec2(5, 3))", async () => {
+  const testVec3Set: THREE.Node<"vec4"> = vec4(1, 0, 2, 5).setYZ(vec2(5, 3));
+
+  expect(testVec3Set.getNodeType(nodeBuilder)).toBe("vec4");
+
+  scene.backgroundNode = testVec3Set.debug();
+
+  await renderer.init();
+  renderer.render(scene, camera);
+});
+
 test("vec3(1, 0, 2).setXZ(3)", async () => {
+  // This doesn't work as expected, the resulting output is:
+  // vec3<f32>( vec2<f32>( 3.0 ), vec3<f32>( 1.0, 0.0, 2.0 ).z )
+  // @ts-expect-error
   const testVec3Set: THREE.Node<"vec3"> = vec3(1, 0, 2).setXZ(3);
+
+  expect(testVec3Set.getNodeType(nodeBuilder)).toBe("vec3");
+
+  scene.backgroundNode = testVec3Set.debug();
+
+  await renderer.init();
+  renderer.render(scene, camera);
+});
+
+test("vec3(1, 0, 2).setXZ(vec2(5, 3))", async () => {
+  // This doesn't work as expected, the resulting output is:
+  // vec3<f32>( vec2<f32>( 5.0, 3.0 ), vec3<f32>( 1.0, 0.0, 2.0 ).z )
+  // @ts-expect-error
+  const testVec3Set: THREE.Node<"vec3"> = vec3(1, 0, 2).setXZ(vec2(5, 3));
 
   expect(testVec3Set.getNodeType(nodeBuilder)).toBe("vec3");
 
@@ -179,6 +224,7 @@ test("vec3(1, 0, 2).flipXZ()", async () => {
 });
 
 test("vec3(1, 0, 2).flipZX()", async () => {
+  // This is functions correctly, but we don't include it to cut down on the number of methods
   // @ts-expect-error
   const testVec3Set: THREE.Node<"vec3"> = vec3(1, 0, 2).flipZX();
 
