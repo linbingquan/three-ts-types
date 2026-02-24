@@ -1546,21 +1546,51 @@ declare module "../core/Node.js" {
     }
 }
 
-/** anything that can be passed to {@link nodeObject} */
-export type NodeObjectOption = Node | number | string;
-
-// same logic as in ShaderNodeObject: number,boolean,node->node, otherwise do nothing
 export type NodeObject<T> = T extends Node ? T
     : T extends number ? Node<"float">
     : T extends boolean ? Node<"bool">
+    : T extends (...args: never) => unknown ? unknown // FIXME This should return an FnNode
+    : T extends Vector2 ? Node<"vec2">
+    : T extends Vector3 ? Node<"vec3">
+    : T extends Vector4 ? Node<"vec4">
+    : T extends Matrix2 ? Node<"mat2">
+    : T extends Matrix3 ? Node<"mat3">
+    : T extends Matrix4 ? Node<"mat4">
+    : T extends Color ? Node<"color">
+    : T extends ArrayBuffer ? Node<"ArrayBuffer">
     : T;
 
-// opposite of NodeObject: node -> node|boolean|number, otherwise do nothing
-type Proxied<T> = T extends Node | number ? Node | number : T;
+type Proxied<T> = T extends Node<infer TNodeType>
+    ? Node<TNodeType> extends T ? TNodeType extends "float" ? Node<"float"> | Node<"uint"> | number // FIXME remove Node<"uint">
+        : TNodeType extends "bool" ? Node<"bool"> | boolean
+        : TNodeType extends "vec2" ? Node<"vec2"> | Vector2
+        : TNodeType extends "vec3" ? Node<"vec3"> | Vector3
+        : TNodeType extends "vec4" ? Node<"vec4"> | Vector4
+        : TNodeType extends "mat2" ? Node<"mat2"> | Matrix2
+        : TNodeType extends "mat3" ? Node<"mat3"> | Matrix3
+        : TNodeType extends "mat4" ? Node<"mat4"> | Matrix4
+        : TNodeType extends "color" ? Node<"color"> | Color
+        : TNodeType extends "ArrayBuffer" ? Node<"ArrayBuffer"> | ArrayBuffer
+        : T
+    : T
+    : T;
+
+type CoercibleToNodeType<TNodeType> = TNodeType extends "float" ? Node<"float"> | Node<"int"> | Node<"uint"> | number
+    : TNodeType extends "bool" ? Node<"bool"> | boolean
+    : TNodeType extends "vec2" ? Node<"vec2"> | Node<"ivec2"> | Node<"uvec2"> | Vector2
+    : TNodeType extends "vec3" ? Node<"vec3"> | Node<"ivec3"> | Node<"uvec3"> | Vector3
+    : TNodeType extends "vec4" ? Node<"vec4"> | Node<"ivec4"> | Node<"uvec4"> | Vector4
+    : TNodeType extends "mat2" ? Node<"mat2"> | Matrix2
+    : TNodeType extends "vec3" ? Node<"mat3"> | Matrix3
+    : TNodeType extends "vec4" ? Node<"mat4"> | Matrix4
+    : TNodeType extends "color" ? Node<"color"> | Color
+    : TNodeType extends "ArrayBuffer" ? Node<"ArrayBuffer"> | ArrayBuffer
+    : Node<TNodeType>;
+
 // https://github.com/microsoft/TypeScript/issues/42435#issuecomment-765557874
 // eslint-disable-next-line @definitelytyped/no-single-element-tuple-type
-export type ProxiedTuple<T extends readonly [...unknown[]]> = [...{ [index in keyof T]: Proxied<T[index]> }];
-export type ProxiedObject<T> = { [index in keyof T]: Proxied<T[index]> };
+export type ProxiedTuple<T extends readonly [...unknown[]]> = [...{ [Index in keyof T]: Proxied<T[Index]> }];
+export type ProxiedObject<T> = { [Index in keyof T]: Proxied<T[Index]> };
 // eslint-disable-next-line @definitelytyped/no-single-element-tuple-type
 type RemoveTail<T extends readonly [...unknown[]]> = T extends [unknown, ...infer X] ? X : [];
 // eslint-disable-next-line @definitelytyped/no-single-element-tuple-type
@@ -1646,8 +1676,8 @@ type GetConstructorsByScope<T, S> = ConstructorUnion<FilterConstructorsByScope<O
 type GetConstructors<T> = ConstructorUnion<OverloadedConstructorsOf<T>>;
 type GetPossibleScopes<T> = ExtractScopes<OverloadedConstructorsOf<T>>;
 
-type NodeArray<T extends NodeObjectOption[]> = { [index in keyof T]: NodeObject<T[index]> };
-type NodeObjects<T> = { [key in keyof T]: T[key] extends NodeObjectOption ? NodeObject<T[key]> : T[key] };
+type NodeArray<T extends unknown[]> = { [Index in keyof T]: NodeObject<T[Index]> };
+type NodeObjects<T> = { [Key in keyof T]: NodeObject<T[Key]> };
 type ConstructedNode<T> = T extends new(...args: any[]) => infer R ? (R extends Node ? R : never) : never;
 
 export type NodeOrType = Node | string;
@@ -1668,12 +1698,12 @@ export class ShaderNode<T = {}, R extends Node = Node> {
     ) => R;
 }
 
-export function nodeObject<T extends NodeObjectOption>(obj: T): NodeObject<T>;
-export function nodeObjectIntent<T extends NodeObjectOption>(obj: T): NodeObject<T>;
+export function nodeObject<T>(obj: T): NodeObject<T>;
+export function nodeObjectIntent<T>(obj: T): NodeObject<T>;
 export function nodeObjects<T>(obj: T): NodeObjects<T>;
 
 // eslint-disable-next-line @definitelytyped/no-single-element-tuple-type
-export function nodeArray<T extends NodeObjectOption[]>(obj: readonly [...T]): NodeArray<T>;
+export function nodeArray<T extends unknown[]>(obj: readonly [...T]): NodeArray<T>;
 
 export function nodeProxy<T>(
     nodeClass: T,
@@ -1687,7 +1717,7 @@ export function nodeProxy<T, S extends GetPossibleScopes<T>>(
 export function nodeProxy<T, S extends GetPossibleScopes<T>>(
     nodeClass: T,
     scope: S,
-    factor: NodeObjectOption,
+    factor: unknown,
 ): (...params: ProxiedTuple<RemoveHeadAndTail<GetConstructorsByScope<T, S>>>) => ConstructedNode<T>;
 
 export function nodeImmutable<T>(
@@ -1707,10 +1737,10 @@ export function nodeProxyIntent<T, S extends GetPossibleScopes<T>>(
 export function nodeProxyIntent<T, S extends GetPossibleScopes<T>>(
     nodeClass: T,
     scope: S,
-    factor: NodeObjectOption,
+    factor: unknown,
 ): (...params: ProxiedTuple<RemoveHeadAndTail<GetConstructorsByScope<T, S>>>) => ConstructedNode<T>;
 
-interface Layout {
+interface FullLayout {
     name: string;
     type: string;
     inputs: {
@@ -1720,9 +1750,16 @@ interface Layout {
     }[];
 }
 
-export interface FnNode<Args extends readonly unknown[], TReturn> {
+interface AbbreviatedLayout {
+    [inputName: string]: string;
+    return: string;
+}
+
+type Layout = FullLayout | AbbreviatedLayout;
+
+export interface FnNode<TArgs extends readonly unknown[], TReturn> {
     // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
-    (...args: Args): TReturn extends void ? ShaderCallNodeInternal<void> : TReturn;
+    (...args: TArgs): TReturn extends void ? ShaderCallNodeInternal<void> : TReturn;
 
     shaderNode: ShaderNodeInternal<TReturn>;
     id: number;
@@ -1737,15 +1774,15 @@ export interface FnNode<Args extends readonly unknown[], TReturn> {
 
 export function Fn<TReturn>(
     jsFunc: (builder: NodeBuilder) => TReturn,
-    layout?: string | Record<string, string>,
+    layout?: Layout | string,
 ): FnNode<[], TReturn>;
 export function Fn<TArgs extends readonly unknown[], TReturn>(
     jsFunc: (args: TArgs, builder: NodeBuilder) => TReturn,
-    layout?: string | Record<string, string>,
+    layout?: Layout | string,
 ): FnNode<ProxiedTuple<TArgs>, TReturn>;
 export function Fn<TArgs extends { readonly [key: string]: unknown }, TReturn>(
     jsFunc: (args: TArgs, builder: NodeBuilder) => TReturn,
-    layout?: string | Record<string, string>,
+    layout?: Layout | string,
     // eslint-disable-next-line @definitelytyped/no-single-element-tuple-type
 ): FnNode<[ProxiedObject<TArgs>], TReturn>;
 
