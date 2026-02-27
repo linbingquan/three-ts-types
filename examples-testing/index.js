@@ -58,7 +58,6 @@ const exceptionList = [
     'webgpu_reflection_blurred',
     'webgpu_sandbox',
     'webgpu_shadertoy',
-    'webgpu_shadowmap_opacity',
     'webgpu_skinning_points',
     'webgpu_tsl_compute_attractors_particles',
     'webgpu_tsl_editor',
