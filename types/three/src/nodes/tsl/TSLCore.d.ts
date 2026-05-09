@@ -5,11 +5,13 @@ import { Matrix4 } from "../../math/Matrix4.js";
 import { Vector2 } from "../../math/Vector2.js";
 import { Vector3 } from "../../math/Vector3.js";
 import { Vector4 } from "../../math/Vector4.js";
+import ArrayNode from "../core/ArrayNode.js";
 import ConstNode from "../core/ConstNode.js";
 import Node, { MatType, NumOrBoolType } from "../core/Node.js";
 import NodeBuilder from "../core/NodeBuilder.js";
 import StackNode from "../core/StackNode.js";
 import VarNode from "../core/VarNode.js";
+import ArrayElementNode from "../utils/ArrayElementNode.js";
 import ConvertNode from "../utils/ConvertNode.js";
 import JoinNode from "../utils/JoinNode.js";
 
@@ -2398,14 +2400,18 @@ declare module "../core/Node.js" {
     }
 }
 
-export const element: (node: Node, indexNode: Node) => Node;
+export const element: <TNodeType>(node: ArrayNode<TNodeType>, indexNode: Node | number) => ArrayElementNode<TNodeType>;
 export const convert: (node: Node, types: string) => Node;
 export const split: (node: Node, channels?: string) => Node;
 
+declare module "../core/ArrayNode.js" {
+    interface ArrayNodeInterface<TNodeType> {
+        element: (indexNode: Node | number) => ArrayElementNode<TNodeType>;
+    }
+}
+
 declare module "../core/Node.js" {
     interface NodeElements {
-        element: (indexNode: Node) => Node;
-
         convert: (types: string) => Node;
     }
 }
